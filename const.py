@@ -8,3 +8,6 @@ DATA_ZHA_GATEWAY = "zha_gateway"
 
 ATTR_LAST_SEEN = "last_seen"
 ATTR_NAME = "name"
+
+CONF_MAX_DELAY = "max_delay"
+DEFAULT_MAX_DELAY = 120
