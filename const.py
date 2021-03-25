@@ -1,10 +1,10 @@
-"""Constants for RCSLink Component."""
+"""Constants for ZHA Watchdog Component."""
 
-DOMAIN = "zb_sensor"
-ZB_SENSOR = "ZB_SENSOR"
+DOMAIN = "zha_watchdog"
+ZHA_WD_SENSOR = "zha_watchdog_sensor"
 
 DATA_ZHA = "zha"
 DATA_ZHA_GATEWAY = "zha_gateway"
 
 ATTR_LAST_SEEN = "last_seen"
-
+ATTR_NAME = "name"

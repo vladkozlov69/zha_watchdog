@@ -1,57 +1,46 @@
-"""Support for reading data from a serial port."""
-import json
+"""ZHA Watchdog Sensor"""
 import logging
+from datetime import datetime
 
 # sensor:
 #   - platform: zb_sensor
 
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN, ZB_SENSOR, DATA_ZHA, DATA_ZHA_GATEWAY
+from .const import DOMAIN, ZHA_WD_SENSOR, DATA_ZHA, DATA_ZHA_GATEWAY
+from .const import ATTR_NAME, ATTR_LAST_SEEN
 
 _LOGGER = logging.getLogger(__name__)
 _LOGGER.setLevel(logging.DEBUG)
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+
+async def async_setup_platform(hass, config, async_add_entities,
+                               discovery_info=None):
     """Set up the sensors."""
     hass.data[DOMAIN] = {}
-    sensor = ZBSensor(hass)
-    hass.data[DOMAIN][ZB_SENSOR] = sensor
-
-    # await _async_setup_entity(async_add_entities, config)
-
+    sensor = ZhaWdSensor(hass)
+    hass.data[DOMAIN][ZHA_WD_SENSOR] = sensor
     async_add_entities([sensor], True)
 
-# async def _async_setup_entity(async_add_entities, config, config_entry=None, discovery_data=None
-# ):
-#     """Set up the MQTT Camera."""
-#     async_add_entities([MqttCamera(config, config_entry, discovery_data)])
 
-
-class ZBSensor(Entity):
-    """Representation of a RCSLink sensor."""
+class ZhaWdSensor(Entity):
+    """Representation of a ZHA Watchdog sensor."""
 
     def __init__(self, hass):
         """Initialization"""
-        self._name = 'ZBSensor'
+        self._name = 'ZHA Watchdog'
         self._attributes = {}
         self._state = None
         self._hass = hass
-        _LOGGER.debug('ZBSensor init')
 
     @property
     def name(self):
         """Return the name of the sensor."""
         return self._name
 
-    # @property
-    # def should_poll(self):
-    #     """No polling needed."""
-    #     return False
-
     @property
     def device_state_attributes(self):
-        """Return the attributes of the entity (if any JSON present)."""
+        """Return the attributes of the entity."""
         return self._attributes
 
     def update(self):
@@ -59,20 +48,23 @@ class ZBSensor(Entity):
 
         This is the only method that should fetch new data for Home Assistant.
         """
-        _LOGGER.debug('ZBSensor update')
         if DATA_ZHA in self._hass.data:
             if DATA_ZHA_GATEWAY in self._hass.data[DATA_ZHA]:
                 zha_gateway = self._hass.data[DATA_ZHA][DATA_ZHA_GATEWAY]
-                devices = [device.zha_device_info for device in zha_gateway.devices.values()]
+                devices = [device.zha_device_info
+                           for device in zha_gateway.devices.values()]
                 attrs = {}
+                current_time = datetime.now()
                 for device in devices:
-                    name = device['name']
-                    last_seen = device['last_seen']
+                    name = device[ATTR_NAME]
                     if (name != 'unk_manufacturer unk_model'):
+                        last_seen = device[ATTR_LAST_SEEN]
+                        last_seen_time = datetime.strptime(last_seen,
+                                                           '%Y-%m-%dT%H:%M:%S')
+                        delta = (current_time - last_seen_time).total_seconds()
+                        _LOGGER.info(delta / 60)
                         attrs[name.replace(' ', '_')] = last_seen
-                        _LOGGER.debug('name: %s, last_seen:%s', 
-                                    device['name'], 
-                                    device['last_seen'])
+
                 self._attributes.update(attrs)
 
     @property
