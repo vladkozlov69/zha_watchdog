@@ -1,7 +1,7 @@
 {
-  "domain": "zb_sensor",
-  "name": "ModemManager interface (SMS, Calls)",
-  "documentation": "https://www.home-assistant.io/integrations/sms",
+  "domain": "zha_watchdog",
+  "name": "ZHA Watchdog",
+  "documentation": "TBD",
   "requirements": ["python-networkmanager==2.1"],
   "codeowners": ["@vkozloff"],
   "config_flow": false
