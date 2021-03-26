@@ -19,7 +19,9 @@ from .const import (
     CONF_MAX_DELAY,
     DEFAULT_MAX_DELAY,
     ATTR_USER_GIVEN_NAME,
-    ATTR_IEEE)
+    ATTR_IEEE,
+    ATTR_DEVICE_TYPE,
+    DEVICE_TYPE_COORDINATOR)
 
 _LOGGER = logging.getLogger(__name__)
 _LOGGER.setLevel(logging.DEBUG)
@@ -77,17 +79,18 @@ class ZhaWdSensor(Entity):
                     name = device[ATTR_NAME]
                     if (name != 'unk_manufacturer unk_model'):
                         user_given_name = device[ATTR_USER_GIVEN_NAME]
+                        device_type = device[ATTR_DEVICE_TYPE]
                         ieee = device[ATTR_IEEE]
                         last_seen = device[ATTR_LAST_SEEN]
                         last_seen_time = datetime.strptime(last_seen,
                                                            '%Y-%m-%dT%H:%M:%S')
                         delta = (current_time - last_seen_time).total_seconds()
-                        _LOGGER.info(delta / 60)
                         if (user_given_name is None):
                             name = name + '_' + ieee
                         else:
                             name = user_given_name
-                        if ((delta / 60) > self._max_delay):
+                        if ((device_type != DEVICE_TYPE_COORDINATOR) and
+                           ((delta / 60) > self._max_delay)):
                             self._state = name
                             missing_devices = True
                         attrs[name.replace(' ', '_')] = last_seen
