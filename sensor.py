@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 _LOGGER.setLevel(logging.DEBUG)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_MAX_DELAY, default=DEFAULT_MAX_DELAY): cv.string,
+    vol.Optional(CONF_MAX_DELAY, default=DEFAULT_MAX_DELAY): cv.positive_int,
 })
 
 
@@ -50,7 +50,7 @@ class ZhaWdSensor(Entity):
         self._attributes = {}
         self._state = 'running'
         self._hass = hass
-        self._max_delay = int(max_delay)
+        self._max_delay = max_delay
 
     @property
     def name(self):
