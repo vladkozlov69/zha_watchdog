@@ -4,7 +4,7 @@ from datetime import datetime
 
 import voluptuous as vol
 # sensor:
-#   - platform: zb_sensor
+#   - platform: zha_watchdog
 #     max_delay: 60
 
 from homeassistant.helpers.entity import Entity
@@ -13,7 +13,13 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, ZHA_WD_SENSOR, DATA_ZHA, DATA_ZHA_GATEWAY
-from .const import ATTR_NAME, ATTR_LAST_SEEN, CONF_MAX_DELAY, DEFAULT_MAX_DELAY
+from .const import (
+    ATTR_NAME,
+    ATTR_LAST_SEEN,
+    CONF_MAX_DELAY,
+    DEFAULT_MAX_DELAY,
+    ATTR_USER_GIVEN_NAME,
+    ATTR_IEEE)
 
 _LOGGER = logging.getLogger(__name__)
 _LOGGER.setLevel(logging.DEBUG)
@@ -70,11 +76,17 @@ class ZhaWdSensor(Entity):
                 for device in devices:
                     name = device[ATTR_NAME]
                     if (name != 'unk_manufacturer unk_model'):
+                        user_given_name = device[ATTR_USER_GIVEN_NAME]
+                        ieee = device[ATTR_IEEE]
                         last_seen = device[ATTR_LAST_SEEN]
                         last_seen_time = datetime.strptime(last_seen,
                                                            '%Y-%m-%dT%H:%M:%S')
                         delta = (current_time - last_seen_time).total_seconds()
                         _LOGGER.info(delta / 60)
+                        if (user_given_name is None):
+                            name = name + '_' + ieee
+                        else:
+                            name = user_given_name
                         if ((delta / 60) > self._max_delay):
                             self._state = name
                             missing_devices = True

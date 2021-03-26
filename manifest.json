@@ -1,8 +1,8 @@
 {
   "domain": "zha_watchdog",
   "name": "ZHA Watchdog",
-  "documentation": "TBD",
-  "requirements": ["python-networkmanager==2.1"],
+  "documentation": "https://github.com/vladkozlov69/zha_watchdog",
+  "requirements": [],
   "codeowners": ["@vkozloff"],
   "config_flow": false
 }
