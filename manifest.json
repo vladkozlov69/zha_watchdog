@@ -4,6 +4,6 @@
   "documentation": "https://github.com/vladkozlov69/zha_watchdog",
   "requirements": [],
   "codeowners": ["@vkozloff"],
-  "config_flow": false
+  "config_flow": false,
   "version": "0.0.1"
 }
