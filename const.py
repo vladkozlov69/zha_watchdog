@@ -16,3 +16,4 @@ DEVICE_TYPE_COORDINATOR = 'Coordinator'
 
 CONF_MAX_DELAY = 'max_delay'
 DEFAULT_MAX_DELAY = 120
+CONF_DEVICE_DELAY = 'device_delay'

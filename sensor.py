@@ -17,6 +17,7 @@ from .const import (
     ATTR_NAME,
     ATTR_LAST_SEEN,
     CONF_MAX_DELAY,
+    CONF_DEVICE_DELAY,
     DEFAULT_MAX_DELAY,
     ATTR_USER_GIVEN_NAME,
     ATTR_IEEE,
@@ -28,6 +29,7 @@ _LOGGER.setLevel(logging.DEBUG)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_MAX_DELAY, default=DEFAULT_MAX_DELAY): cv.positive_int,
+    vol.Optional(CONF_DEVICE_DELAY): vol.Any(dict),
 })
 
 
@@ -35,8 +37,9 @@ async def async_setup_platform(hass, config, async_add_entities,
                                discovery_info=None):
     """Set up the sensors."""
     max_delay = config.get(CONF_MAX_DELAY)
+    device_delay = config.get(CONF_DEVICE_DELAY)
     hass.data[DOMAIN] = {}
-    sensor = ZhaWdSensor(hass, max_delay)
+    sensor = ZhaWdSensor(hass, max_delay, device_delay)
     hass.data[DOMAIN][ZHA_WD_SENSOR] = sensor
     async_add_entities([sensor], True)
 
@@ -44,13 +47,14 @@ async def async_setup_platform(hass, config, async_add_entities,
 class ZhaWdSensor(Entity):
     """Representation of a ZHA Watchdog sensor."""
 
-    def __init__(self, hass, max_delay):
+    def __init__(self, hass, max_delay, device_delay):
         """Initialization"""
         self._name = 'ZHA Watchdog'
         self._attributes = {}
         self._state = 'running'
         self._hass = hass
         self._max_delay = max_delay
+        self._device_delay = device_delay
 
     @property
     def name(self):
@@ -89,8 +93,13 @@ class ZhaWdSensor(Entity):
                             name = name + '_' + ieee
                         else:
                             name = user_given_name
+
+                        expected_delay = self._max_delay
+                        if (name in self._device_delay):
+                            expected_delay = self._device_delay.get(name)
+
                         if ((device_type != DEVICE_TYPE_COORDINATOR) and
-                           ((delta / 60) > self._max_delay)):
+                           ((delta / 60) > expected_delay)):
                             self._state = name
                             missing_devices = True
                         attrs[name.replace(' ', '_')] = last_seen
