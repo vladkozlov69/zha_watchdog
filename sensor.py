@@ -95,8 +95,9 @@ class ZhaWdSensor(Entity):
                             name = user_given_name
 
                         expected_delay = self._max_delay
-                        if (name in self._device_delay):
-                            expected_delay = self._device_delay.get(name)
+                        if (self._device_delay is not None):
+                            if (name in self._device_delay):
+                                expected_delay = self._device_delay.get(name)
 
                         if ((device_type != DEVICE_TYPE_COORDINATOR) and
                            ((delta / 60) > expected_delay)):
