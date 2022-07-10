@@ -38,6 +38,9 @@ async def async_setup_platform(hass, config, async_add_entities,
     """Set up the sensors."""
     max_delay = config.get(CONF_MAX_DELAY)
     device_delay = config.get(CONF_DEVICE_DELAY)
+    _LOGGER.info('ZHA Watchdog device delay: %s', device_delay)
+    #for key, value in device_delay.items():
+        #_LOGGER.info('ZHA Watchdog device [%s] delay [%s]', key, value)
     hass.data[DOMAIN] = {}
     sensor = ZhaWdSensor(hass, max_delay, device_delay)
     hass.data[DOMAIN][ZHA_WD_SENSOR] = sensor
@@ -93,11 +96,14 @@ class ZhaWdSensor(Entity):
                             name = name + '_' + ieee
                         else:
                             name = user_given_name
+                        # _LOGGER.info('checking [%s]', name)
 
                         expected_delay = self._max_delay
                         if (self._device_delay is not None):
+                            # _LOGGER.info('checking in [%s]', self._device_delay)
                             if (name in self._device_delay):
                                 expected_delay = self._device_delay.get(name)
+                                # _LOGGER.info('expected_delay [%s]', expected_delay)
 
                         if ((device_type != DEVICE_TYPE_COORDINATOR) and
                            ((delta / 60) > expected_delay)):
