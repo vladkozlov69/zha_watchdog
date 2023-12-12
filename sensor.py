@@ -75,8 +75,12 @@ class ZhaWdSensor(Entity):
         This is the only method that should fetch new data for Home Assistant.
         """
         if DATA_ZHA in self._hass.data:
-            if DATA_ZHA_GATEWAY in self._hass.data[DATA_ZHA]:
-                zha_gateway = self._hass.data[DATA_ZHA][DATA_ZHA_GATEWAY]
+            if self._hass.data[DATA_ZHA] is not None:
+                #_LOGGER.info('self._hass.data[DATA_ZHA] = %s', self._hass.data[DATA_ZHA])
+                zha_gateway = self._hass.data[DATA_ZHA].gateway
+                #_LOGGER.info('zha_gateway = %s', zha_gateway)
+                if zha_gateway is None:
+                    return
                 devices = [device.zha_device_info
                            for device in zha_gateway.devices.values()]
                 attrs = {}
