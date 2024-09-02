@@ -77,27 +77,33 @@ class ZhaWdSensor(Entity):
         if DATA_ZHA in self._hass.data:
             if self._hass.data[DATA_ZHA] is not None:
                 #_LOGGER.info('self._hass.data[DATA_ZHA] = %s', self._hass.data[DATA_ZHA])
-                zha_gateway = self._hass.data[DATA_ZHA].gateway
+                zha_gateway_proxy = self._hass.data[DATA_ZHA].gateway_proxy
+                zha_gateway = zha_gateway_proxy.gateway
                 #_LOGGER.info('zha_gateway = %s', zha_gateway)
                 if zha_gateway is None:
                     return
-                devices = [device.zha_device_info
-                           for device in zha_gateway.devices.values()]
+                devices = zha_gateway.devices.values()
                 attrs = {}
                 current_time = datetime.now()
                 missing_devices = False
-                for device in devices:
-                    name = device[ATTR_NAME]
+                for dv in devices:
+                    device = dv.device_info
+                    ieee = device.ieee
+                    device_proxy = zha_gateway_proxy.get_device_proxy(ieee)
+                    #_LOGGER.info(device)
+                    #_LOGGER.info(device_proxy.zha_device_info)
+                    name = device.name
                     if (name != 'unk_manufacturer unk_model'):
-                        user_given_name = device[ATTR_USER_GIVEN_NAME]
-                        device_type = device[ATTR_DEVICE_TYPE]
-                        ieee = device[ATTR_IEEE]
-                        last_seen = device[ATTR_LAST_SEEN]
+                        #_LOGGER.info(device_proxy.zha_device_info['user_given_name'])
+                        user_given_name = device_proxy.zha_device_info['user_given_name']
+                        device_type = device.device_type
+                        ieee = device.ieee
+                        last_seen = device.last_seen
                         last_seen_time = datetime.strptime(last_seen,
                                                            '%Y-%m-%dT%H:%M:%S')
                         delta = (current_time - last_seen_time).total_seconds()
                         if (user_given_name is None):
-                            name = name + '_' + ieee
+                            name = name + '_' + str(ieee)
                         else:
                             name = user_given_name
                         # _LOGGER.info('checking [%s]', name)
