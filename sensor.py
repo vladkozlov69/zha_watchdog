@@ -391,7 +391,6 @@ class ZhaWdSensor(SensorEntityBase):
                 ATTR_LAST_CHECKED: now.isoformat(),
                 ATTR_OVERDUE_DEVICES: [],
                 ATTR_OVERDUE_COUNT: 0,
-                ATTR_DEVICE_LAST_SEEN: {},
                 "zha_available": False,
             }
             if self._device_delay:
@@ -402,7 +401,7 @@ class ZhaWdSensor(SensorEntityBase):
 
         self._available = True
         devices = self._iter_devices(gateway)
-        device_last_seen: dict[str, Any] = {}
+        device_attrs: dict[str, Any] = {}
         overdue_devices: list[str] = []
         checked_count = 0
         matched_delay_keys: set[str] = set()
@@ -442,13 +441,6 @@ class ZhaWdSensor(SensorEntityBase):
 
                 display_name = legacy_name
 
-                # Stable attribute key prefers IEEE, falls back to display name.
-                attr_base = ieee_str or display_name
-                attr_key = _sanitize_attr_key(str(attr_base))
-                if attr_key in device_last_seen and ieee_str is None:
-                    # Avoid collisions for non-IEEE fallback keys.
-                    attr_key = _sanitize_attr_key(f"{attr_base}_{checked_count}")
-
                 # Normalize last_seen value for attributes.
                 if raw_last_seen is None:
                     normalized_last_seen: Any = None
@@ -461,11 +453,12 @@ class ZhaWdSensor(SensorEntityBase):
                 else:
                     normalized_last_seen = str(raw_last_seen)
 
-                # Store last_seen under stable key and legacy-compatible name key.
-                device_last_seen[attr_key] = normalized_last_seen
-                legacy_attr_key = legacy_name.replace(" ", "_")
-                if legacy_attr_key and legacy_attr_key not in device_last_seen:
-                    device_last_seen[legacy_attr_key] = normalized_last_seen
+                # Expose per-device last_seen only under friendly/user-given legacy name
+                # (avoid MAC/IEEE-only attributes and aggregate device_last_seen map).
+                if user_given_name_str:
+                    legacy_attr_key = legacy_name.replace(" ", "_")
+                    if legacy_attr_key:
+                        device_attrs[legacy_attr_key] = normalized_last_seen
 
                 checked_count += 1
 
@@ -494,21 +487,16 @@ class ZhaWdSensor(SensorEntityBase):
             ATTR_LAST_CHECKED: now.isoformat(),
             ATTR_OVERDUE_DEVICES: overdue_devices_sorted,
             ATTR_OVERDUE_COUNT: len(overdue_devices_sorted),
-            ATTR_DEVICE_LAST_SEEN: device_last_seen,
             "checked_devices": checked_count,
             "max_delay": self._max_delay,
             "device_delay": dict(self._device_delay),
             "zha_available": True,
         }
 
-        # Backward-compatible per-device attributes (refreshed each update).
-        # Match old behavior: expose per-device last_seen keyed by name with spaces replaced by underscores.
-        for key, value in device_last_seen.items():
+        # Backward-compatible per-device attributes for friendly/user-given names only.
+        for key, value in device_attrs.items():
             if key not in attrs:
                 attrs[key] = value
-        # Also include legacy name-keyed form when different from attr_key for compatibility.
-        # (device_last_seen currently stores by attr_key; legacy consumers often looked up by sanitized name)
-        # Note: attrs already rebuilt each update to avoid stale entries.
 
         unmatched_delay_keys = sorted(set(self._device_delay.keys()) - matched_delay_keys)
         self._unmatched_delay_keys = set(unmatched_delay_keys)

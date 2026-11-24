@@ -131,8 +131,10 @@ def test_overdue_device_sets_state_and_attributes(hass, fixed_now):
     assert sensor.extra_state_attributes[ATTR_OVERDUE_DEVICES] == ["Kitchen Sensor"]
     assert sensor.extra_state_attributes[ATTR_OVERDUE_COUNT] == 1
     assert sensor.extra_state_attributes["zha_available"] is True
-    assert ATTR_DEVICE_LAST_SEEN in sensor.extra_state_attributes
-    assert sensor.extra_state_attributes[ATTR_DEVICE_LAST_SEEN]
+    assert ATTR_DEVICE_LAST_SEEN not in sensor.extra_state_attributes
+    assert "Kitchen_Sensor" in sensor.extra_state_attributes
+    assert "00_11_22_33_44_55_66_77" not in sensor.extra_state_attributes
+    assert "00 11 22 33 44 55 66 77" not in sensor.extra_state_attributes
 
 
 def test_multiple_overdue_devices_are_deterministic(hass, fixed_now):
@@ -209,8 +211,8 @@ def test_attributes_are_refreshed_each_update(hass, fixed_now):
     with patch("zha_watchdog.sensor.dt_util.utcnow", return_value=fixed_now):
         sensor.update()
     assert sensor.state == "Kitchen Sensor"
-    first_keys = set(sensor.extra_state_attributes.keys())
-    assert ATTR_DEVICE_LAST_SEEN in first_keys
+    assert ATTR_DEVICE_LAST_SEEN not in sensor.extra_state_attributes
+    assert "Kitchen_Sensor" in sensor.extra_state_attributes
 
     _set_gateway(hass, devices_second)
     with patch("zha_watchdog.sensor.dt_util.utcnow", return_value=fixed_now + timedelta(minutes=1)):
@@ -218,10 +220,11 @@ def test_attributes_are_refreshed_each_update(hass, fixed_now):
 
     assert sensor.state == "running"
     assert sensor.extra_state_attributes[ATTR_OVERDUE_COUNT] == 0
-    assert sensor.extra_state_attributes[ATTR_DEVICE_LAST_SEEN] == {}
+    assert ATTR_DEVICE_LAST_SEEN not in sensor.extra_state_attributes
     # No stale per-device key should remain from previous run.
     assert "Kitchen_Sensor" not in sensor.extra_state_attributes
     assert "00:11:22:33:44:55:66:77" not in sensor.extra_state_attributes
+    assert "00_11_22_33_44_55_66_77" not in sensor.extra_state_attributes
 
 
 async def test_async_apply_platform_config_updates_thresholds(hass, fixed_now):
