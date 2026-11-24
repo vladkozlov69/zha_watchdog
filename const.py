@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Vladimir Kozlov <vkozloff@gmail.com>
+# SPDX-License-Identifier: MIT
+
 """Constants for ZHA Watchdog Component."""
 
 DOMAIN = "zha_watchdog"
