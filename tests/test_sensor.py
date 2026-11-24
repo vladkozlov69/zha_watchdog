@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Vladimir Kozlov <vkozloff@gmail.com>
+# SPDX-License-Identifier: MIT
+
 """Tests for the ZHA Watchdog sensor and reload behavior."""
 
 from __future__ import annotations

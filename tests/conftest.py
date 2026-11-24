@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Vladimir Kozlov <vkozloff@gmail.com>
+# SPDX-License-Identifier: MIT
+
 """Test setup for the zha_watchdog custom integration."""
 
 from __future__ import annotations
