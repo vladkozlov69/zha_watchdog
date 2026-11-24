@@ -82,6 +82,24 @@ def _normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return {CONF_MAX_DELAY: max_delay, CONF_DEVICE_DELAY: device_delay}
 
 
+def _normalize_match_text(value: Any) -> str | None:
+    """Normalize text for flexible device-delay key matching."""
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    # Collapse whitespace and common IEEE separators for tolerant matching.
+    text = " ".join(text.split())
+    text = (
+        text.replace(":", " ")
+        .replace("-", " ")
+        .replace("_", " ")
+        .replace(".", " ")
+    )
+    return " ".join(text.split()) or None
+
+
 async def async_setup_platform(
     hass: HomeAssistant,
     config: dict[str, Any],
@@ -208,6 +226,7 @@ class ZhaWdSensor(SensorEntityBase):
         self._available = True
         self._max_delay = DEFAULT_MAX_DELAY
         self._device_delay: dict[str, int] = {}
+        self._device_delay_normalized: dict[str, tuple[str, int]] = {}
         self._unmatched_delay_keys: set[str] | None = None
         self.apply_platform_config(config)
 
@@ -246,6 +265,11 @@ class ZhaWdSensor(SensorEntityBase):
         normalized = _normalize_config(config)
         self._max_delay = normalized[CONF_MAX_DELAY]
         self._device_delay = normalized[CONF_DEVICE_DELAY]
+        self._device_delay_normalized = {}
+        for key, delay in self._device_delay.items():
+            norm = _normalize_match_text(key)
+            if norm and norm not in self._device_delay_normalized:
+                self._device_delay_normalized[norm] = (key, delay)
         self._unmatched_delay_keys = set(self._device_delay.keys())
         _LOGGER.debug(
             "ZHA Watchdog config applied: max_delay=%s, device_delay=%s",
@@ -312,9 +336,12 @@ class ZhaWdSensor(SensorEntityBase):
         """Resolve expected delay (minutes) and matched config key for a device."""
         for candidate in candidates:
             if candidate in self._device_delay:
-                if self._unmatched_delay_keys is not None:
-                    self._unmatched_delay_keys.discard(candidate)
                 return self._device_delay[candidate], candidate
+        for candidate in candidates:
+            norm = _normalize_match_text(candidate)
+            if norm and norm in self._device_delay_normalized:
+                original_key, delay = self._device_delay_normalized[norm]
+                return delay, original_key
         return self._max_delay, None
 
     def update(self) -> None:
@@ -324,13 +351,16 @@ class ZhaWdSensor(SensorEntityBase):
         if gateway is None:
             # Keep entity available with compatibility-oriented state; report unavailable ZHA in attributes.
             self._available = True
-            self._attributes = {
+            attrs: dict[str, Any] = {
                 ATTR_LAST_CHECKED: now.isoformat(),
                 ATTR_OVERDUE_DEVICES: [],
                 ATTR_OVERDUE_COUNT: 0,
                 ATTR_DEVICE_LAST_SEEN: {},
                 "zha_available": False,
             }
+            if self._device_delay:
+                attrs["unmatched_device_delay_keys"] = sorted(self._device_delay.keys())
+            self._attributes = attrs
             self._state = "running"
             return
 
@@ -339,6 +369,7 @@ class ZhaWdSensor(SensorEntityBase):
         device_last_seen: dict[str, Any] = {}
         overdue_devices: list[str] = []
         checked_count = 0
+        matched_delay_keys: set[str] = set()
 
         for device_obj in devices:
             try:
@@ -409,26 +440,53 @@ class ZhaWdSensor(SensorEntityBase):
 
                 checked_count += 1
 
+                # Also expose per-device last_seen under display/friendly key for compatibility.
+                if display_name and display_name != attr_key and display_name not in device_last_seen:
+                    device_last_seen[display_name] = device_last_seen[attr_key]
+
                 if device_type_str == DEVICE_TYPE_COORDINATOR:
                     continue
                 if last_seen_dt is None:
                     continue
 
                 delay_candidates: list[str] = []
-                for candidate in (
-                    ieee_str,
-                    user_given_name_str,
-                    device_name_str,
-                    display_name,
-                    attr_base,
-                ):
-                    if candidate and candidate not in delay_candidates:
-                        delay_candidates.append(str(candidate))
+                seen_candidates: set[str] = set()
+
+                def _add_candidate(value: Any) -> None:
+                    if value is None:
+                        return
+                    text = str(value).strip()
+                    if not text or text in seen_candidates:
+                        return
+                    seen_candidates.add(text)
+                    delay_candidates.append(text)
+
+                # Common identity/name fields across ZHA/HA versions.
+                _add_candidate(ieee_str)
+                if ieee_str:
+                    compact_ieee = ieee_str.replace(":", "").replace("-", "").replace(" ", "")
+                    _add_candidate(compact_ieee)
+                    _add_candidate(compact_ieee.lower())
+                    _add_candidate(ieee_str.lower())
+                    _add_candidate(ieee_str.replace(":", "_"))
+                    _add_candidate(ieee_str.replace(":", "-"))
+                _add_candidate(user_given_name_str)
+                _add_candidate(device_name_str)
+                _add_candidate(display_name)
+                _add_candidate(attr_base)
+                _add_candidate(attr_key)
+                _add_candidate(_get_attr_or_key(device_obj, "name"))
+                _add_candidate(_get_attr_or_key(info, "name"))
+                _add_candidate(_get_attr_or_key(device_obj, "user_given_name", "name_by_user"))
+                _add_candidate(_get_attr_or_key(info, "user_given_name", "name_by_user"))
+                _add_candidate(_get_attr_or_key(device_obj, "friendly_name"))
+                _add_candidate(_get_attr_or_key(info, "friendly_name"))
 
                 expected_delay_minutes, matched_key = self._resolve_expected_delay(
                     delay_candidates
                 )
-                _ = matched_key  # matched key retained for possible future diagnostics
+                if matched_key:
+                    matched_delay_keys.add(matched_key)
 
                 age_seconds = (now - last_seen_dt).total_seconds()
                 if age_seconds < 0:
@@ -458,8 +516,10 @@ class ZhaWdSensor(SensorEntityBase):
             if key not in attrs:
                 attrs[key] = value
 
-        if self._unmatched_delay_keys:
-            attrs["unmatched_device_delay_keys"] = sorted(self._unmatched_delay_keys)
+        unmatched_delay_keys = sorted(set(self._device_delay.keys()) - matched_delay_keys)
+        self._unmatched_delay_keys = set(unmatched_delay_keys)
+        if unmatched_delay_keys:
+            attrs["unmatched_device_delay_keys"] = unmatched_delay_keys
 
         self._attributes = attrs
         self._state = overdue_devices_sorted[0] if overdue_devices_sorted else "running"
