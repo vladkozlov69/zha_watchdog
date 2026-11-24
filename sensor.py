@@ -332,16 +332,52 @@ class ZhaWdSensor(SensorEntityBase):
         except TypeError:
             return []
 
-    def _resolve_expected_delay(self, candidates: list[str]) -> tuple[int, str | None]:
-        """Resolve expected delay (minutes) and matched config key for a device."""
-        for candidate in candidates:
-            if candidate in self._device_delay:
-                return self._device_delay[candidate], candidate
-        for candidate in candidates:
-            norm = _normalize_match_text(candidate)
-            if norm and norm in self._device_delay_normalized:
-                original_key, delay = self._device_delay_normalized[norm]
-                return delay, original_key
+    def _get_gateway_proxy(self, gateway: Any) -> Any | None:
+        """Best-effort access to ZHA gateway proxy (legacy API compatibility)."""
+        zha_data = self.hass.data.get(DATA_ZHA)
+        for candidate in (
+            getattr(zha_data, "gateway_proxy", None) if zha_data is not None else None,
+            getattr(gateway, "gateway_proxy", None),
+            getattr(getattr(gateway, "application_controller", None), "gateway_proxy", None),
+        ):
+            if candidate is not None:
+                return candidate
+        if isinstance(zha_data, dict):
+            for key in ("gateway_proxy", "proxy"):
+                if zha_data.get(key) is not None:
+                    return zha_data.get(key)
+        return None
+
+    def _get_user_given_name(self, gateway: Any, device_obj: Any, ieee: Any) -> str | None:
+        """Get user-given name using legacy ZHA proxy path first for compatibility."""
+        proxy = self._get_gateway_proxy(gateway)
+        if proxy is not None and ieee is not None:
+            try:
+                get_device_proxy = getattr(proxy, "get_device_proxy", None)
+                if callable(get_device_proxy):
+                    device_proxy = get_device_proxy(ieee)
+                else:
+                    device_proxy = None
+                if device_proxy is not None:
+                    zha_info = getattr(device_proxy, "zha_device_info", None)
+                    if isinstance(zha_info, dict):
+                        value = zha_info.get("user_given_name")
+                        if value not in (None, ""):
+                            return str(value)
+            except Exception:  # noqa: BLE001
+                pass
+        info = _extract_device_info(device_obj)
+        value = _get_attr_or_key(device_obj, "user_given_name", "name_by_user") or _get_attr_or_key(
+            info, "user_given_name", "name_by_user"
+        )
+        if value in (None, ""):
+            return None
+        return str(value)
+
+    def _resolve_expected_delay(self, legacy_name: str) -> tuple[int, str | None]:
+        """Resolve expected delay using the same name-matching logic as before change."""
+        if self._device_delay and legacy_name in self._device_delay:
+            return self._device_delay[legacy_name], legacy_name
         return self._max_delay, None
 
     def update(self) -> None:
@@ -380,45 +416,31 @@ class ZhaWdSensor(SensorEntityBase):
                 device_name = _get_attr_or_key(info, "name") or _get_attr_or_key(device_obj, "name")
                 device_name_str = str(device_name) if device_name is not None else None
 
-                # Skip clearly unknown placeholders if no stable identity is available
-                if (
-                    device_name_str == "unk_manufacturer unk_model"
-                    and not ieee_str
-                ):
+                # Skip clearly unknown placeholders if no stable identity is available (as before).
+                if device_name_str == "unk_manufacturer unk_model":
                     continue
 
-                user_given_name = _get_attr_or_key(
-                    device_obj, "user_given_name", "name_by_user"
-                ) or _get_attr_or_key(info, "user_given_name", "name_by_user")
-                user_given_name_str = (
-                    str(user_given_name) if user_given_name not in (None, "") else None
-                )
-
+                user_given_name_str = self._get_user_given_name(gateway, device_obj, ieee)
                 device_type = _get_attr_or_key(info, "device_type") or _get_attr_or_key(
                     device_obj, "device_type"
                 )
                 device_type_str = str(device_type) if device_type is not None else None
-
-                if device_type_str == DEVICE_TYPE_COORDINATOR:
-                    # Still record last_seen if present, but do not treat as overdue.
-                    pass
 
                 raw_last_seen = _get_attr_or_key(info, "last_seen") or _get_attr_or_key(
                     device_obj, "last_seen"
                 )
                 last_seen_dt = _parse_last_seen(raw_last_seen)
 
-                display_name = user_given_name_str
-                if not display_name:
-                    if device_name_str and device_name_str != "unk_manufacturer unk_model":
-                        if ieee_str:
-                            display_name = f"{device_name_str}_{ieee_str}"
-                        else:
-                            display_name = device_name_str
-                    elif ieee_str:
-                        display_name = ieee_str
-                    else:
-                        continue
+                # Legacy naming/matching behavior (pre-change): use user_given_name if set,
+                # otherwise "<device.name>_<ieee>".
+                if user_given_name_str is None:
+                    legacy_name = f"{device_name_str}_{ieee_str}" if (device_name_str and ieee_str) else (device_name_str or ieee_str)
+                else:
+                    legacy_name = user_given_name_str
+                if not legacy_name:
+                    continue
+
+                display_name = legacy_name
 
                 # Stable attribute key prefers IEEE, falls back to display name.
                 attr_base = ieee_str or display_name
@@ -427,64 +449,33 @@ class ZhaWdSensor(SensorEntityBase):
                     # Avoid collisions for non-IEEE fallback keys.
                     attr_key = _sanitize_attr_key(f"{attr_base}_{checked_count}")
 
+                # Normalize last_seen value for attributes.
                 if raw_last_seen is None:
-                    device_last_seen[attr_key] = None
+                    normalized_last_seen: Any = None
                 elif isinstance(raw_last_seen, (str, int, float)):
-                    device_last_seen[attr_key] = raw_last_seen
+                    normalized_last_seen = raw_last_seen
                 elif isinstance(raw_last_seen, datetime):
-                    device_last_seen[attr_key] = dt_util.as_utc(
+                    normalized_last_seen = dt_util.as_utc(
                         raw_last_seen if raw_last_seen.tzinfo else raw_last_seen.replace(tzinfo=dt_util.UTC)
                     ).isoformat()
                 else:
-                    device_last_seen[attr_key] = str(raw_last_seen)
+                    normalized_last_seen = str(raw_last_seen)
+
+                # Store last_seen under stable key and legacy-compatible name key.
+                device_last_seen[attr_key] = normalized_last_seen
+                legacy_attr_key = legacy_name.replace(" ", "_")
+                if legacy_attr_key and legacy_attr_key not in device_last_seen:
+                    device_last_seen[legacy_attr_key] = normalized_last_seen
 
                 checked_count += 1
 
-                # Also expose per-device last_seen under display/friendly key for compatibility.
-                if display_name and display_name != attr_key and display_name not in device_last_seen:
-                    device_last_seen[display_name] = device_last_seen[attr_key]
-
+                # Coordinator is not evaluated for overdue (same as before), but keep last_seen.
                 if device_type_str == DEVICE_TYPE_COORDINATOR:
                     continue
                 if last_seen_dt is None:
                     continue
 
-                delay_candidates: list[str] = []
-                seen_candidates: set[str] = set()
-
-                def _add_candidate(value: Any) -> None:
-                    if value is None:
-                        return
-                    text = str(value).strip()
-                    if not text or text in seen_candidates:
-                        return
-                    seen_candidates.add(text)
-                    delay_candidates.append(text)
-
-                # Common identity/name fields across ZHA/HA versions.
-                _add_candidate(ieee_str)
-                if ieee_str:
-                    compact_ieee = ieee_str.replace(":", "").replace("-", "").replace(" ", "")
-                    _add_candidate(compact_ieee)
-                    _add_candidate(compact_ieee.lower())
-                    _add_candidate(ieee_str.lower())
-                    _add_candidate(ieee_str.replace(":", "_"))
-                    _add_candidate(ieee_str.replace(":", "-"))
-                _add_candidate(user_given_name_str)
-                _add_candidate(device_name_str)
-                _add_candidate(display_name)
-                _add_candidate(attr_base)
-                _add_candidate(attr_key)
-                _add_candidate(_get_attr_or_key(device_obj, "name"))
-                _add_candidate(_get_attr_or_key(info, "name"))
-                _add_candidate(_get_attr_or_key(device_obj, "user_given_name", "name_by_user"))
-                _add_candidate(_get_attr_or_key(info, "user_given_name", "name_by_user"))
-                _add_candidate(_get_attr_or_key(device_obj, "friendly_name"))
-                _add_candidate(_get_attr_or_key(info, "friendly_name"))
-
-                expected_delay_minutes, matched_key = self._resolve_expected_delay(
-                    delay_candidates
-                )
+                expected_delay_minutes, matched_key = self._resolve_expected_delay(legacy_name)
                 if matched_key:
                     matched_delay_keys.add(matched_key)
 
@@ -511,10 +502,13 @@ class ZhaWdSensor(SensorEntityBase):
         }
 
         # Backward-compatible per-device attributes (refreshed each update).
-        # Values mirror last_seen data keyed by sanitized display/identity names.
+        # Match old behavior: expose per-device last_seen keyed by name with spaces replaced by underscores.
         for key, value in device_last_seen.items():
             if key not in attrs:
                 attrs[key] = value
+        # Also include legacy name-keyed form when different from attr_key for compatibility.
+        # (device_last_seen currently stores by attr_key; legacy consumers often looked up by sanitized name)
+        # Note: attrs already rebuilt each update to avoid stale entries.
 
         unmatched_delay_keys = sorted(set(self._device_delay.keys()) - matched_delay_keys)
         self._unmatched_delay_keys = set(unmatched_delay_keys)
