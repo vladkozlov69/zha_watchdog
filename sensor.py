@@ -16,9 +16,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 try:
-    from homeassistant.components.sensor import SensorEntity
+    from homeassistant.components.sensor import SensorEntity as SensorEntityBase
 except Exception:  # noqa: BLE001
-    SensorEntity = Entity  # type: ignore[misc,assignment]
+    SensorEntityBase = Entity
 
 from .const import (
     ATTR_DEVICE_LAST_SEEN,
@@ -192,7 +192,7 @@ def _sanitize_attr_key(name: str) -> str:
     return key or "device"
 
 
-class ZhaWdSensor(SensorEntity):
+class ZhaWdSensor(SensorEntityBase):
     """Representation of a ZHA Watchdog sensor."""
 
     _attr_should_poll = True
