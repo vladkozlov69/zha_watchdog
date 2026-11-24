@@ -2,8 +2,11 @@
   "domain": "zha_watchdog",
   "name": "ZHA Watchdog",
   "documentation": "https://github.com/vladkozlov69/zha_watchdog",
+  "issue_tracker": "https://github.com/vladkozlov69/zha_watchdog/issues",
   "requirements": [],
-  "codeowners": ["@vkozloff"],
+  "codeowners": ["@vladkozlov69"],
   "config_flow": false,
-  "version": "0.0.1"
+  "iot_class": "local_polling",
+  "after_dependencies": ["zha"],
+  "version": "0.1.0"
 }

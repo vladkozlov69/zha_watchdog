@@ -1,19 +1,19 @@
 """Constants for ZHA Watchdog Component."""
 
-DOMAIN = 'zha_watchdog'
-ZHA_WD_SENSOR = 'zha_watchdog_sensor'
+DOMAIN = "zha_watchdog"
+ZHA_WD_SENSOR = "zha_watchdog_sensor"
+SERVICE_RELOAD = "reload"
 
-DATA_ZHA = 'zha'
-DATA_ZHA_GATEWAY = 'zha_gateway'
+DATA_ZHA = "zha"
 
-ATTR_LAST_SEEN = 'last_seen'
-ATTR_NAME = 'name'
-ATTR_USER_GIVEN_NAME = 'user_given_name'
-ATTR_IEEE = 'ieee'
-ATTR_DEVICE_TYPE = 'device_type'
+ATTR_LAST_SEEN = "last_seen"
+ATTR_LAST_CHECKED = "last_checked"
+ATTR_OVERDUE_DEVICES = "overdue_devices"
+ATTR_OVERDUE_COUNT = "overdue_count"
+ATTR_DEVICE_LAST_SEEN = "device_last_seen"
 
-DEVICE_TYPE_COORDINATOR = 'Coordinator'
-
-CONF_MAX_DELAY = 'max_delay'
+CONF_MAX_DELAY = "max_delay"
 DEFAULT_MAX_DELAY = 120
-CONF_DEVICE_DELAY = 'device_delay'
+CONF_DEVICE_DELAY = "device_delay"
+
+DEVICE_TYPE_COORDINATOR = "Coordinator"
